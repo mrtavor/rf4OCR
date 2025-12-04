@@ -7,10 +7,10 @@ import os
 import json
 
 # 1. Налаштування Tesseract
-try:
-    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-except:
-    pass 
+# try:
+#     pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+# except:
+#     pass
 
 # Константи
 TARGET_WIDTH = 1920
@@ -23,27 +23,6 @@ PREPROCESSING_CONFIG_FILE = 'preprocessing_settings.json'
 current_image = None
 click_points = []
 roi_data = {}
-
-# Назви всіх 17 водойм у грі
-WATER_BODIES = [
-    'оз. Комаринное',
-    'оз. Лосиное',
-    'р. Вьюнок',
-    'оз. Старый Острог',
-    'р. Белая',
-    'оз. Куори',
-    'р. Волхов',
-    'р. Северный Донец',
-    'р. Сура',
-    'Ладожское оз.',
-    'оз. Янтарное',
-    'Ладожский архипелаг',
-    'р. Ахтуба',
-    'оз. Медное',
-    'р. Нижняя Тунгуска',
-    'р. Яма',
-    'Норвежское море'
-]
 
 # --- Функції для роботи з конфігурацією ---
 
@@ -545,40 +524,63 @@ def apply_preprocessing(pil_img, settings):
     return Image.fromarray(img_thresh)
 
 def detect_active_water_body(pil_img, water_coords):
-    """Визначає активну водойму по зеленій стрілці"""
-    max_green_pixels = 0
-    active_water = "Не визначено"
-    
+    """
+    Визначає активну водойму, порівнюючи середній колір фону.
+    Активна водойма зазвичай має інший фон.
+    """
+    if not water_coords:
+        return "Не визначено"
+
+    avg_colors = {}
     for name, roi in water_coords.items():
-        x1, y1, x2, y2 = roi
-        # Розширюємо область пошуку зліва (там де стрілка)
-        arrow_roi = (max(0, x1-50), y1, x1, y2)
-        arrow_img = pil_img.crop(arrow_roi)
+        water_img = pil_img.crop(roi)
+        img_array = np.array(water_img)
+        avg_colors[name] = np.mean(img_array, axis=(0, 1))
+
+    # Знаходимо найбільш унікальний колір
+    color_distances = {}
+    for name1, color1 in avg_colors.items():
+        total_distance = 0
+        for name2, color2 in avg_colors.items():
+            if name1 != name2:
+                total_distance += np.linalg.norm(color1 - color2)
+        color_distances[name1] = total_distance
+
+    if not color_distances:
+        return "Не визначено"
         
-        # Конвертуємо в HSV для пошуку зеленого кольору
-        img_array = np.array(arrow_img)
-        hsv = cv2.cvtColor(img_array, cv2.COLOR_RGB2HSV)
-        
-        # Розширений діапазон зеленого кольору (для різних відтінків)
-        lower_green = np.array([35, 50, 50])
-        upper_green = np.array([85, 255, 255])
-        mask = cv2.inRange(hsv, lower_green, upper_green)
-        
-        # Підраховуємо зелені пікселі
-        green_pixels = np.sum(mask > 0)
-        
-        # Вибираємо водойму з найбільшою кількістю зелених пікселів
-        if green_pixels > max_green_pixels and green_pixels > 30:
-            max_green_pixels = green_pixels
-            active_water = name
-    
+    # Водойма з максимальною відстанню від інших є активною
+    active_water = max(color_distances, key=color_distances.get)
     return active_water
 
 def is_card_filled(card_img):
-    """Перевіряє заповненість картки"""
-    img_array = np.array(card_img.convert('L'))
-    avg_brightness = np.mean(img_array)
-    return avg_brightness < 80
+    """
+    Перевіряє заповненість картки за допомогою комбінованого підходу.
+    """
+    # 1. Аналіз стандартного відхилення інтенсивності
+    img_gray = np.array(card_img.convert('L'))
+    std_dev = np.std(img_gray)
+    std_dev_threshold = 15  # Емпірично підібраний поріг
+
+    # 2. Аналіз щільності країв (Canny)
+    edges = cv2.Canny(img_gray, 50, 150)
+    edge_density = np.sum(edges > 0) / (edges.shape[0] * edges.shape[1])
+    edge_density_threshold = 0.02 # Зменшимо поріг, бо деякі картки мають мало тексту
+
+    # 3. Аналіз кольорових пікселів (відмінних від фону)
+    # Припускаємо, що фон - це темний сірий/чорний колір
+    img_rgb = np.array(card_img.convert('RGB'))
+    # Рахуємо пікселі, які не є темними (яскравість > 50)
+    non_dark_pixels = np.sum(np.mean(img_rgb, axis=2) > 50)
+    color_pixel_percentage = non_dark_pixels / (img_rgb.shape[0] * img_rgb.shape[1])
+    color_pixel_threshold = 0.1 # 10% пікселів мають бути не темними
+
+    # Логіка для прийняття рішення
+    is_filled_by_texture = std_dev > std_dev_threshold and edge_density > edge_density_threshold
+    is_filled_by_color = color_pixel_percentage > color_pixel_threshold
+
+    # Повертаємо True, якщо будь-яка з умов виконується
+    return is_filled_by_texture or is_filled_by_color
 
 def process_with_coordinates(img_path, coords, preproc_settings):
     """Обробка з координатами"""
@@ -600,7 +602,8 @@ def process_with_coordinates(img_path, coords, preproc_settings):
         print(f"\n✓ Заголовок: {results['header']}")
     
     # Активна водойма
-    if coords.get('water_bodies'):
+    water_bodies = list(coords.get('water_bodies', {}).keys())
+    if water_bodies:
         active_water = detect_active_water_body(pil_img, coords['water_bodies'])
         results['active_location'] = active_water
         print(f"✓ Активна локація: {active_water}")
@@ -634,7 +637,14 @@ def process_with_coordinates(img_path, coords, preproc_settings):
             fish_img = pil_img.crop(coords['fish_names'][i])
             fish_img = apply_preprocessing(fish_img, preproc_settings)
             raw_text = pytesseract.image_to_string(fish_img, config=CONFIG_RUS).strip()
-            order_result['fish_name'] = clean_fish_name(raw_text)
+            cleaned_name = clean_fish_name(raw_text)
+
+            # Видаляємо назву водойми, якщо вона є
+            for water_body in water_bodies:
+                if water_body in cleaned_name:
+                    cleaned_name = cleaned_name.replace(water_body, '').strip()
+
+            order_result['fish_name'] = cleaned_name
         
         # Таймер картки
         if 'timer' in order:
@@ -695,7 +705,13 @@ def setup_specific_field_type(img_path, coords, field_type_choice):
         if 'water_bodies' not in coords:
             coords['water_bodies'] = {}
         print("Налаштування всіх 17 водойм...")
-        for water_name in WATER_BODIES:
+        water_bodies_names = [
+            'оз. Комаринное', 'оз. Лосиное', 'р. Вьюнок', 'оз. Старый Острог', 'р. Белая',
+            'оз. Куори', 'р. Волхов', 'р. Северный Донец', 'р. Сура', 'Ладожское оз.',
+            'оз. Янтарное', 'Ладожский архипелаг', 'р. Ахтуба', 'оз. Медное',
+            'р. Нижняя Тунгуска', 'р. Яма', 'Норвежское море'
+        ]
+        for water_name in water_bodies_names:
             roi = select_roi(cv_img, f"Виділіть: {water_name}")
             if roi:
                 coords['water_bodies'][water_name] = roi
@@ -872,7 +888,13 @@ def interactive_full_setup(img_path):
     
     # 2. Водойми
     print("\n--- Водойми (17 шт) ---")
-    for water_name in WATER_BODIES:
+    water_bodies_names = [
+        'оз. Комаринное', 'оз. Лосиное', 'р. Вьюнок', 'оз. Старый Острог', 'р. Белая',
+        'оз. Куори', 'р. Волхов', 'р. Северный Донец', 'р. Сура', 'Ладожское оз.',
+        'оз. Янтарное', 'Ладожский архипелаг', 'р. Ахтуба', 'оз. Медное',
+        'р. Нижняя Тунгуска', 'р. Яма', 'Норвежское море'
+    ]
+    for water_name in water_bodies_names:
         roi = select_roi(cv_img, f"Виділіть: {water_name}")
         if roi:
             roi_data['water_bodies'][water_name] = roi
