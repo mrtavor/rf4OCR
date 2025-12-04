@@ -545,40 +545,49 @@ def apply_preprocessing(pil_img, settings):
     return Image.fromarray(img_thresh)
 
 def detect_active_water_body(pil_img, water_coords):
-    """Визначає активну водойму по зеленій стрілці"""
-    max_green_pixels = 0
-    active_water = "Не визначено"
-    
+    """
+    Визначає активну водойму, порівнюючи середній колір фону.
+    Активна водойма зазвичай має інший фон.
+    """
+    if not water_coords:
+        return "Не визначено"
+
+    avg_colors = {}
     for name, roi in water_coords.items():
-        x1, y1, x2, y2 = roi
-        # Розширюємо область пошуку зліва (там де стрілка)
-        arrow_roi = (max(0, x1-50), y1, x1, y2)
-        arrow_img = pil_img.crop(arrow_roi)
+        water_img = pil_img.crop(roi)
+        img_array = np.array(water_img)
+        avg_colors[name] = np.mean(img_array, axis=(0, 1))
+
+    # Знаходимо найбільш унікальний колір
+    color_distances = {}
+    for name1, color1 in avg_colors.items():
+        total_distance = 0
+        for name2, color2 in avg_colors.items():
+            if name1 != name2:
+                total_distance += np.linalg.norm(color1 - color2)
+        color_distances[name1] = total_distance
+
+    if not color_distances:
+        return "Не визначено"
         
-        # Конвертуємо в HSV для пошуку зеленого кольору
-        img_array = np.array(arrow_img)
-        hsv = cv2.cvtColor(img_array, cv2.COLOR_RGB2HSV)
-        
-        # Розширений діапазон зеленого кольору (для різних відтінків)
-        lower_green = np.array([35, 50, 50])
-        upper_green = np.array([85, 255, 255])
-        mask = cv2.inRange(hsv, lower_green, upper_green)
-        
-        # Підраховуємо зелені пікселі
-        green_pixels = np.sum(mask > 0)
-        
-        # Вибираємо водойму з найбільшою кількістю зелених пікселів
-        if green_pixels > max_green_pixels and green_pixels > 30:
-            max_green_pixels = green_pixels
-            active_water = name
-    
+    # Водойма з максимальною відстанню від інших є активною
+    active_water = max(color_distances, key=color_distances.get)
     return active_water
 
-def is_card_filled(card_img):
-    """Перевіряє заповненість картки"""
-    img_array = np.array(card_img.convert('L'))
-    avg_brightness = np.mean(img_array)
-    return avg_brightness < 80
+def is_card_filled(card_img, threshold=0.05):
+    """
+    Перевіряє заповненість картки за допомогою аналізу щільності країв.
+    Поріг (threshold) - це відсоток пікселів, які мають бути краями.
+    """
+    img_gray = np.array(card_img.convert('L'))
+
+    # Використовуємо Canny edge detection
+    edges = cv2.Canny(img_gray, 50, 150)
+
+    # Розраховуємо щільність країв
+    edge_density = np.sum(edges > 0) / (edges.shape[0] * edges.shape[1])
+
+    return edge_density > threshold
 
 def process_with_coordinates(img_path, coords, preproc_settings):
     """Обробка з координатами"""
@@ -634,7 +643,14 @@ def process_with_coordinates(img_path, coords, preproc_settings):
             fish_img = pil_img.crop(coords['fish_names'][i])
             fish_img = apply_preprocessing(fish_img, preproc_settings)
             raw_text = pytesseract.image_to_string(fish_img, config=CONFIG_RUS).strip()
-            order_result['fish_name'] = clean_fish_name(raw_text)
+            cleaned_name = clean_fish_name(raw_text)
+
+            # Видаляємо назву водойми, якщо вона є
+            for water_body in WATER_BODIES:
+                if water_body in cleaned_name:
+                    cleaned_name = cleaned_name.replace(water_body, '').strip()
+
+            order_result['fish_name'] = cleaned_name
         
         # Таймер картки
         if 'timer' in order:
