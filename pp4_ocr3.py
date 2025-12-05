@@ -7,10 +7,10 @@ import os
 import json
 
 # 1. Налаштування Tesseract
-try:
-    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-except:
-    pass 
+# try:
+#     pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+# except:
+#     pass
 
 # Константи
 TARGET_WIDTH = 1920
@@ -23,27 +23,6 @@ PREPROCESSING_CONFIG_FILE = 'preprocessing_settings.json'
 current_image = None
 click_points = []
 roi_data = {}
-
-# Назви всіх 17 водойм у грі
-WATER_BODIES = [
-    'оз. Комаринное',
-    'оз. Лосиное',
-    'р. Вьюнок',
-    'оз. Старый Острог',
-    'р. Белая',
-    'оз. Куори',
-    'р. Волхов',
-    'р. Северный Донец',
-    'р. Сура',
-    'Ладожское оз.',
-    'оз. Янтарное',
-    'Ладожский архипелаг',
-    'р. Ахтуба',
-    'оз. Медное',
-    'р. Нижняя Тунгуска',
-    'р. Яма',
-    'Норвежское море'
-]
 
 # --- Функції для роботи з конфігурацією ---
 
@@ -609,7 +588,8 @@ def process_with_coordinates(img_path, coords, preproc_settings):
         print(f"\n✓ Заголовок: {results['header']}")
     
     # Активна водойма
-    if coords.get('water_bodies'):
+    water_bodies = list(coords.get('water_bodies', {}).keys())
+    if water_bodies:
         active_water = detect_active_water_body(pil_img, coords['water_bodies'])
         results['active_location'] = active_water
         print(f"✓ Активна локація: {active_water}")
@@ -711,7 +691,13 @@ def setup_specific_field_type(img_path, coords, field_type_choice):
         if 'water_bodies' not in coords:
             coords['water_bodies'] = {}
         print("Налаштування всіх 17 водойм...")
-        for water_name in WATER_BODIES:
+        water_bodies_names = [
+            'оз. Комаринное', 'оз. Лосиное', 'р. Вьюнок', 'оз. Старый Острог', 'р. Белая',
+            'оз. Куори', 'р. Волхов', 'р. Северный Донец', 'р. Сура', 'Ладожское оз.',
+            'оз. Янтарное', 'Ладожский архипелаг', 'р. Ахтуба', 'оз. Медное',
+            'р. Нижняя Тунгуска', 'р. Яма', 'Норвежское море'
+        ]
+        for water_name in water_bodies_names:
             roi = select_roi(cv_img, f"Виділіть: {water_name}")
             if roi:
                 coords['water_bodies'][water_name] = roi
@@ -888,7 +874,13 @@ def interactive_full_setup(img_path):
     
     # 2. Водойми
     print("\n--- Водойми (17 шт) ---")
-    for water_name in WATER_BODIES:
+    water_bodies_names = [
+        'оз. Комаринное', 'оз. Лосиное', 'р. Вьюнок', 'оз. Старый Острог', 'р. Белая',
+        'оз. Куори', 'р. Волхов', 'р. Северный Донец', 'р. Сура', 'Ладожское оз.',
+        'оз. Янтарное', 'Ладожский архипелаг', 'р. Ахтуба', 'оз. Медное',
+        'р. Нижняя Тунгуска', 'р. Яма', 'Норвежское море'
+    ]
+    for water_name in water_bodies_names:
         roi = select_roi(cv_img, f"Виділіть: {water_name}")
         if roi:
             roi_data['water_bodies'][water_name] = roi
