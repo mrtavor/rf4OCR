@@ -1,0 +1,71 @@
+{
+  "header": "Кафе",
+  "active_location": "Норвежское море",
+  "timer": "",
+  "orders": [
+    {
+      "card_num": 1,
+      "fish_name": "Мерлуза Бормежкое",
+      "timer": "0:04",
+      "quantity": "1",
+      "weight": "1,5 кг",
+      "price": "57,60"
+    },
+    {
+      "card_num": 2,
+      "fish_name": "Сардина европейская Рорзеж ков узр",
+      "timer": "",
+      "quantity": "3",
+      "weight": "50 г",
+      "price": "82,87"
+    },
+    {
+      "card_num": 3,
+      "fish_name": "Зубатка полосатая оръежкое узр",
+      "timer": "",
+      "quantity": "1",
+      "weight": "2 кг",
+      "price": "93,64"
+    },
+    {
+      "card_num": 4,
+      "fish_name": "Камбала морская оръежткое мар",
+      "timer": "",
+      "quantity": "2",
+      "weight": "800 г",
+      "price": "141,08"
+    },
+    {
+      "card_num": 5,
+      "fish_name": "Менёк Рораежекое мар",
+      "timer": "",
+      "quantity": "2",
+      "weight": "10,249 кг",
+      "price": "162,12"
+    },
+    {
+      "card_num": 6,
+      "fish_name": "Сайра атлантическая",
+      "timer": "3:92",
+      "quantity": "4",
+      "weight": "374 г",
+      "price": "305,30"
+    },
+    {
+      "card_num": 7,
+      "fish_name": "Камбала морская орион м ре",
+      "timer": "",
+      "quantity": "1",
+      "weight": "4,5 кг",
+      "price": "414,98"
+    },
+    {
+      "card_num": 8,
+      "fish_name": "Мерлуза ормежекое марк",
+      "timer": "",
+      "quantity": "1",
+      "weight": "10,499 кг",
+      "price": "854,01"
+    }
+  ]
+}
