@@ -553,35 +553,20 @@ def detect_active_water_body(pil_img, water_coords):
     active_water = max(color_distances, key=color_distances.get)
     return active_water
 
-def is_card_filled(card_img):
+def is_card_filled(card_img, threshold=0.05):
     """
-    Перевіряє заповненість картки за допомогою комбінованого підходу.
+    Перевіряє заповненість картки за допомогою аналізу щільності країв.
+    Поріг (threshold) - це відсоток пікселів, які мають бути краями.
     """
-    # 1. Аналіз стандартного відхилення інтенсивності
     img_gray = np.array(card_img.convert('L'))
-    std_dev = np.std(img_gray)
-    std_dev_threshold = 15  # Емпірично підібраний поріг
 
-    # 2. Аналіз щільності країв (Canny)
+    # Використовуємо Canny edge detection
     edges = cv2.Canny(img_gray, 50, 150)
+
+    # Розраховуємо щільність країв
     edge_density = np.sum(edges > 0) / (edges.shape[0] * edges.shape[1])
-    edge_density_threshold = 0.02 # Зменшимо поріг, бо деякі картки мають мало тексту
 
-    # 3. Аналіз кольорових пікселів (відмінних від фону)
-    # Припускаємо, що фон - це темний сірий/чорний колір
-    img_rgb = np.array(card_img.convert('RGB'))
-    # Рахуємо пікселі, які не є темними (яскравість > 50)
-    non_dark_pixels = np.sum(np.mean(img_rgb, axis=2) > 50)
-    color_pixel_percentage = non_dark_pixels / (img_rgb.shape[0] * img_rgb.shape[1])
-    color_pixel_threshold = 0.1 # 10% пікселів мають бути не темними
-
-    # Логіка для прийняття рішення
-    is_filled_by_texture = std_dev > std_dev_threshold and edge_density > edge_density_threshold
-    is_filled_by_color = color_pixel_percentage > color_pixel_threshold
-
-    # Повертаємо True, якщо будь-яка з умов виконується
-    print(f"Card Analysis: std_dev={std_dev:.2f} (>{std_dev_threshold}), edge_density={edge_density:.4f} (>{edge_density_threshold}), color_perc={color_pixel_percentage:.4f} (>{color_pixel_threshold})")
-    return is_filled_by_texture or is_filled_by_color
+    return edge_density > threshold
 
 def process_with_coordinates(img_path, coords, preproc_settings):
     """Обробка з координатами"""
@@ -641,7 +626,7 @@ def process_with_coordinates(img_path, coords, preproc_settings):
             cleaned_name = clean_fish_name(raw_text)
 
             # Видаляємо назву водойми, якщо вона є
-            for water_body in water_bodies:
+            for water_body in WATER_BODIES:
                 if water_body in cleaned_name:
                     cleaned_name = cleaned_name.replace(water_body, '').strip()
 
